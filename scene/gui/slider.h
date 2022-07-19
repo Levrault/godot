@@ -42,12 +42,33 @@ class Slider : public Range {
 		bool active = false;
 	} grab;
 
+	struct JoypadMotion {
+		bool up = false;
+		bool down = false;
+		bool left = false;
+		bool right = false;
+		bool is_valid() {
+			return up || down || left || right;
+		};
+		void reset() {
+			up = false;
+			down = false;
+			left = false;
+			right = false;
+		};
+	} joypad_motion_axis_handled;
+
 	int ticks = 0;
 	bool mouse_inside = false;
 	Orientation orientation;
 	double custom_step = -1.0;
 	bool editable = true;
 	bool scrollable = true;
+	Timer *delay_timer = nullptr;
+	Timer *echo_timer = nullptr;
+	int repeating_rate = 20;
+	void _start_joypad_motion_echo();
+	void _echo_joypad_motion();
 
 protected:
 	virtual void gui_input(const Ref<InputEvent> &p_event) override;

@@ -619,6 +619,9 @@
 		<member name="gui/common/default_scroll_deadzone" type="int" setter="" getter="" default="0">
 			Default value for [member ScrollContainer.scroll_deadzone], which will be used for all [ScrollContainer]s unless overridden.
 		</member>
+		<member name="gui/common/default_slider_repeating_rate" type="int" setter="" getter="" default="20">
+			Default value for [member Slider.repeating_rate]. Maximum repetition per seconds when an input stay pressed/held, will be used for all [Slider]s unless overridden.
+		</member>
 		<member name="gui/common/swap_cancel_ok" type="bool" setter="" getter="">
 			If [code]true[/code], swaps Cancel and OK buttons in dialogs on Windows and UWP to follow interface conventions.
 		</member>
@@ -650,6 +653,9 @@
 			Default font glyph sub-pixel positioning mode. See [member FontFile.subpixel_positioning].
 		</member>
 		<member name="gui/theme/default_theme_scale" type="float" setter="" getter="" default="1.0">
+		</member>
+		<member name="gui/timers/default_slider_delay_timer" type="float" setter="" getter="" default="0.5">
+			Default value for [member Slider.delay_timer]. Delay before repeating the step action for all [Slider]s unless overridden.
 		</member>
 		<member name="gui/timers/incremental_search_max_interval_msec" type="int" setter="" getter="" default="2000">
 			Timer setting for incremental search in [Tree], [ItemList], etc. controls (in milliseconds).
