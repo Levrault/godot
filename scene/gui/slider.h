@@ -50,12 +50,6 @@ class Slider : public Range {
 		bool is_valid() {
 			return up || down || left || right;
 		};
-		void reset() {
-			up = false;
-			down = false;
-			left = false;
-			right = false;
-		};
 	} joypad_motion_axis_handled;
 
 	int ticks = 0;
