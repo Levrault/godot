@@ -34,25 +34,25 @@
 #include "core/input/input.h"
 #include "core/os/keyboard.h"
 
-void Slider::_start_joypad_motion_echo() {
-	if (!joypad_motion_axis_handled.is_valid() || !has_focus()) {
+void Slider::_on_timeout_joypad_delay_timer() {
+	if (!joypad_motion_echo_handled.is_valid() || !has_focus()) {
 		return;
 	}
 	echo_timer->start();
 }
 
-void Slider::_echo_joypad_motion() {
-	if (!joypad_motion_axis_handled.is_valid() || !has_focus()) {
+void Slider::_on_timeout_joypad_echo_timer() {
+	if (!joypad_motion_echo_handled.is_valid() || !has_focus()) {
 		echo_timer->stop();
 		return;
 	}
 
-	if (joypad_motion_axis_handled.left || joypad_motion_axis_handled.down) {
+	if (joypad_motion_echo_handled.left || joypad_motion_echo_handled.down) {
 		set_value(get_value() - (custom_step >= 0 ? custom_step : get_step()));
 		return;
 	}
 
-	if (joypad_motion_axis_handled.right || joypad_motion_axis_handled.up) {
+	if (joypad_motion_echo_handled.right || joypad_motion_echo_handled.up) {
 		set_value(get_value() + (custom_step >= 0 ? custom_step : get_step()));
 		return;
 	}
@@ -139,8 +139,9 @@ void Slider::gui_input(const Ref<InputEvent> &p_event) {
 	}
 
 	Ref<InputEventJoypadMotion> joypadmotion_event = p_event;
+	Ref<InputEventJoypadButton> joypadbutton_event = p_event;
 
-	if (joypadmotion_event.is_valid()) {
+	if (joypadmotion_event.is_valid() || joypadbutton_event.is_valid()) {
 		Input *input = Input::get_singleton();
 
 		if (p_event->is_action_pressed("ui_left")) {
@@ -148,18 +149,18 @@ void Slider::gui_input(const Ref<InputEvent> &p_event) {
 				return;
 			}
 
-			if (joypad_motion_axis_handled.left) {
+			if (joypad_motion_echo_handled.left) {
 				return;
 			}
 			set_value(get_value() - (custom_step >= 0 ? custom_step : get_step()));
 			accept_event();
 			delay_timer->start();
-			joypad_motion_axis_handled.left = true;
+			joypad_motion_echo_handled.left = true;
 		} else if (input->is_action_just_released("ui_left")) {
 			if (orientation != HORIZONTAL) {
 				return;
 			}
-			joypad_motion_axis_handled.left = false;
+			joypad_motion_echo_handled.left = false;
 			delay_timer->stop();
 			echo_timer->stop();
 		}
@@ -169,7 +170,7 @@ void Slider::gui_input(const Ref<InputEvent> &p_event) {
 				return;
 			}
 
-			if (joypad_motion_axis_handled.right) {
+			if (joypad_motion_echo_handled.right) {
 				return;
 			}
 
@@ -177,12 +178,12 @@ void Slider::gui_input(const Ref<InputEvent> &p_event) {
 			accept_event();
 			delay_timer->stop();
 			delay_timer->start();
-			joypad_motion_axis_handled.right = true;
+			joypad_motion_echo_handled.right = true;
 		} else if (input->is_action_just_released("ui_right")) {
 			if (orientation != HORIZONTAL) {
 				return;
 			}
-			joypad_motion_axis_handled.right = false;
+			joypad_motion_echo_handled.right = false;
 			delay_timer->stop();
 			echo_timer->stop();
 		}
@@ -192,19 +193,19 @@ void Slider::gui_input(const Ref<InputEvent> &p_event) {
 				return;
 			}
 
-			if (joypad_motion_axis_handled.up) {
+			if (joypad_motion_echo_handled.up) {
 				return;
 			}
 			set_value(get_value() + (custom_step >= 0 ? custom_step : get_step()));
 			accept_event();
 			delay_timer->stop();
 			delay_timer->start();
-			joypad_motion_axis_handled.up = true;
+			joypad_motion_echo_handled.up = true;
 		} else if (input->is_action_just_released("ui_up")) {
 			if (orientation != VERTICAL) {
 				return;
 			}
-			joypad_motion_axis_handled.up = false;
+			joypad_motion_echo_handled.up = false;
 			delay_timer->stop();
 			echo_timer->stop();
 		}
@@ -214,25 +215,25 @@ void Slider::gui_input(const Ref<InputEvent> &p_event) {
 				return;
 			}
 
-			if (joypad_motion_axis_handled.down) {
+			if (joypad_motion_echo_handled.down) {
 				return;
 			}
 			set_value(get_value() - (custom_step >= 0 ? custom_step : get_step()));
 			accept_event();
 			delay_timer->stop();
 			delay_timer->start();
-			joypad_motion_axis_handled.down = true;
+			joypad_motion_echo_handled.down = true;
 		} else if (input->is_action_just_released("ui_down")) {
 			if (orientation != VERTICAL) {
 				return;
 			}
-			joypad_motion_axis_handled.down = false;
+			joypad_motion_echo_handled.down = false;
 			delay_timer->stop();
 			echo_timer->stop();
 		}
 	}
 
-	if (!mm.is_valid() && !mb.is_valid() && !joypadmotion_event.is_valid()) {
+	if (!mm.is_valid() && !mb.is_valid() && !joypadmotion_event.is_valid() && !joypadbutton_event.is_valid()) {
 		if (p_event->is_action_pressed("ui_left", true)) {
 			if (orientation != HORIZONTAL) {
 				return;
@@ -453,16 +454,16 @@ Slider::Slider(Orientation p_orientation) {
 
 	delay_timer = memnew(Timer);
 	delay_timer->set_one_shot(true);
-	delay_timer->set_wait_time(GLOBAL_DEF_BASIC("gui/timers/default_slider_delay_timer", .5));
-	ProjectSettings::get_singleton()->set_custom_property_info("gui/timers/default_slider_delay_timer", PropertyInfo(Variant::FLOAT, "gui/timers/default_slider_delay_timer", PROPERTY_HINT_RANGE, "0.0,1.0,.01,")); // No negative numbers
-	delay_timer->connect("timeout", callable_mp(this, &Slider::_start_joypad_motion_echo));
+	delay_timer->set_wait_time(GLOBAL_DEF_BASIC("gui/timers/default_joypad_motion_delay", .5));
+	ProjectSettings::get_singleton()->set_custom_property_info(PropertyInfo(Variant::FLOAT, "gui/timers/default_joypad_motion_delay", PROPERTY_HINT_RANGE, "0.01,1.0,0.01")); // No negative numbers
+	delay_timer->connect("timeout", callable_mp(this, &Slider::_on_timeout_joypad_delay_timer));
 	add_child(delay_timer);
 
-	repeating_rate = GLOBAL_DEF_BASIC("gui/common/default_slider_repeating_rate", 20);
-	ProjectSettings::get_singleton()->set_custom_property_info("gui/common/default_slider_repeating_rate", PropertyInfo(Variant::INT, "gui/common/default_slider_repeating_rate", PROPERTY_HINT_RANGE, "1,100,1")); // No negative numbers
+	joypad_motion_echo_handled.repeat_rate = GLOBAL_DEF_BASIC("gui/common/default_joypad_motion_repeating_rate", 20);
+	ProjectSettings::get_singleton()->set_custom_property_info(PropertyInfo(Variant::INT, "gui/common/default_joypad_motion_repeating_rate", PROPERTY_HINT_RANGE, "1,100,1")); // No negative numbers
 
 	echo_timer = memnew(Timer);
-	echo_timer->set_wait_time((float)1 / (float)repeating_rate);
-	echo_timer->connect("timeout", callable_mp(this, &Slider::_echo_joypad_motion));
+	echo_timer->set_wait_time((float)1 / (float)joypad_motion_echo_handled.repeat_rate);
+	echo_timer->connect("timeout", callable_mp(this, &Slider::_on_timeout_joypad_echo_timer));
 	add_child(echo_timer);
 }

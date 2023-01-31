@@ -30,6 +30,7 @@
 
 #include "rich_text_label.h"
 
+#include "core/config/project_settings.h"
 #include "core/input/input_map.h"
 #include "core/math/math_defs.h"
 #include "core/os/keyboard.h"
@@ -42,6 +43,33 @@
 #ifdef MODULE_REGEX_ENABLED
 #include "modules/regex/regex.h"
 #endif
+
+
+void RichTextLabel::_on_timeout_joypad_delay_timer() {
+	if (!joypad_motion_echo_handled.is_valid() || !has_focus()) {
+		return;
+	}
+	echo_timer->start();
+}
+
+void RichTextLabel::_on_timeout_joypad_echo_timer() {
+	if (!joypad_motion_echo_handled.is_valid() || !has_focus()) {
+		echo_timer->stop();
+		return;
+	}
+
+	if (joypad_motion_echo_handled.down) {
+		vscroll->set_value(vscroll->get_value() + theme_cache.normal_font->get_height(theme_cache.normal_font_size));
+		accept_event();
+		return;
+	}
+
+	if (joypad_motion_echo_handled.up) {
+		vscroll->set_value(vscroll->get_value() - theme_cache.normal_font->get_height(theme_cache.normal_font_size));
+		accept_event();
+		return;
+	}
+}
 
 RichTextLabel::Item *RichTextLabel::_get_next_item(Item *p_item, bool p_free) const {
 	if (p_free) {
@@ -2048,9 +2076,44 @@ void RichTextLabel::gui_input(const Ref<InputEvent> &p_event) {
 		return;
 	}
 
+
+	Ref<InputEventJoypadMotion> joypadmotion_event = p_event;
+	Ref<InputEventJoypadButton> joypadbutton_event = p_event;
+
+	if ((joypadmotion_event.is_valid() || joypadbutton_event.is_valid()) && vscroll->is_visible_in_tree()) {
+		Input *input = Input::get_singleton();
+
+		if (p_event->is_action_pressed("ui_up")) {
+			if (joypad_motion_echo_handled.up) {
+				return;
+			}
+			delay_timer->start();
+			joypad_motion_echo_handled.up = true;
+			vscroll->set_value(vscroll->get_value() - theme_cache.normal_font->get_height(theme_cache.normal_font_size));
+			accept_event();
+		} else if (input->is_action_just_released("ui_up")) {
+			joypad_motion_echo_handled.up = false;
+			delay_timer->stop();
+			echo_timer->stop();
+		}
+		if (p_event->is_action_pressed("ui_down")) {
+			if (joypad_motion_echo_handled.down) {
+				return;
+			}
+			delay_timer->start();
+			joypad_motion_echo_handled.down = true;
+			vscroll->set_value(vscroll->get_value() + theme_cache.normal_font->get_height(theme_cache.normal_font_size));
+			accept_event();
+		} else if (input->is_action_just_released("ui_down")) {
+			joypad_motion_echo_handled.down = false;
+			delay_timer->stop();
+			echo_timer->stop();
+		}
+	}
+
 	Ref<InputEventKey> k = p_event;
 
-	if (k.is_valid()) {
+	if (k.is_valid() && !joypadmotion_event.is_valid() && !joypadbutton_event.is_valid()) {
 		if (k->is_pressed()) {
 			bool handled = false;
 
@@ -5882,6 +5945,21 @@ RichTextLabel::RichTextLabel(const String &p_text) {
 	vscroll->connect("value_changed", callable_mp(this, &RichTextLabel::_scroll_changed));
 	vscroll->set_step(1);
 	vscroll->hide();
+
+	delay_timer = memnew(Timer);
+	delay_timer->set_one_shot(true);
+	delay_timer->set_wait_time(GLOBAL_DEF_BASIC("gui/timers/default_joypad_motion_delay", .5));
+	ProjectSettings::get_singleton()->set_custom_property_info(PropertyInfo(Variant::FLOAT, "gui/timers/default_joypad_motion_delay", PROPERTY_HINT_RANGE, "0.01,1.0,0.01")); // No negative numbers
+	delay_timer->connect("timeout", callable_mp(this, &RichTextLabel::_on_timeout_joypad_delay_timer));
+	add_child(delay_timer);
+
+	joypad_motion_echo_handled.repeat_rate = GLOBAL_DEF_BASIC("gui/common/default_joypad_motion_repeating_rate", 20);
+	ProjectSettings::get_singleton()->set_custom_property_info(PropertyInfo(Variant::INT, "gui/common/default_joypad_motion_repeating_rate", PROPERTY_HINT_RANGE, "1,100,1")); // No negative numbers
+
+	echo_timer = memnew(Timer);
+	echo_timer->set_wait_time((float)1 / (float)joypad_motion_echo_handled.repeat_rate);
+	echo_timer->connect("timeout", callable_mp(this, &RichTextLabel::_on_timeout_joypad_echo_timer));
+	add_child(echo_timer);
 
 	set_text(p_text);
 	updating.store(false);

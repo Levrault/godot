@@ -42,7 +42,8 @@ class Slider : public Range {
 		bool active = false;
 	} grab;
 
-	struct JoypadMotion {
+	struct JoypadMotionEcho {
+		int repeat_rate = 20;
 		bool up = false;
 		bool down = false;
 		bool left = false;
@@ -50,7 +51,11 @@ class Slider : public Range {
 		bool is_valid() {
 			return up || down || left || right;
 		};
-	} joypad_motion_axis_handled;
+	} joypad_motion_echo_handled;
+	Timer *delay_timer = nullptr;
+	Timer *echo_timer = nullptr;
+	void _on_timeout_joypad_delay_timer();
+	void _on_timeout_joypad_echo_timer();
 
 	int ticks = 0;
 	bool mouse_inside = false;
@@ -58,11 +63,6 @@ class Slider : public Range {
 	double custom_step = -1.0;
 	bool editable = true;
 	bool scrollable = true;
-	Timer *delay_timer = nullptr;
-	Timer *echo_timer = nullptr;
-	int repeating_rate = 20;
-	void _start_joypad_motion_echo();
-	void _echo_joypad_motion();
 
 	struct ThemeCache {
 		Ref<StyleBox> slider_style;

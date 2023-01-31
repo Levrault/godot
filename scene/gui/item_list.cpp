@@ -34,6 +34,153 @@
 #include "core/os/os.h"
 #include "core/string/translation.h"
 
+
+void ItemList::_on_timeout_joypad_delay_timer() {
+	if (!joypad_motion_echo_handled.is_valid() || !has_focus()) {
+		return;
+	}
+	echo_timer->start();
+}
+
+void ItemList::_on_timeout_joypad_echo_timer() {
+	if (!joypad_motion_echo_handled.is_valid() || !has_focus()) {
+		echo_timer->stop();
+		return;
+	}
+
+#define CAN_SELECT(i) (items[i].selectable && !items[i].disabled)
+#define IS_SAME_ROW(i, row) (i / current_columns == row)
+	if (joypad_motion_echo_handled.up) {
+		if (!search_string.is_empty()) {
+			uint64_t now = OS::get_singleton()->get_ticks_msec();
+			uint64_t diff = now - search_time_msec;
+
+			if (diff < uint64_t(GLOBAL_GET("gui/timers/incremental_search_max_interval_msec")) * 2) {
+				for (int i = current - 1; i >= 0; i--) {
+					if (CAN_SELECT(i) && items[i].text.begins_with(search_string)) {
+						set_current(i);
+						ensure_current_is_visible();
+						if (select_mode == SELECT_SINGLE) {
+							emit_signal(SNAME("item_selected"), current);
+						}
+
+						break;
+					}
+				}
+				accept_event();
+				return;
+			}
+		}
+
+		if (current >= current_columns) {
+			int next = current - current_columns;
+			while (next >= 0 && !CAN_SELECT(next)) {
+				next = next - current_columns;
+			}
+			if (next < 0) {
+				accept_event();
+				return;
+			}
+			set_current(next);
+			ensure_current_is_visible();
+			if (select_mode == SELECT_SINGLE) {
+				emit_signal(SNAME("item_selected"), current);
+			}
+			accept_event();
+		}
+		return;
+	}
+
+	if (joypad_motion_echo_handled.down) {
+		if (!search_string.is_empty()) {
+			uint64_t now = OS::get_singleton()->get_ticks_msec();
+			uint64_t diff = now - search_time_msec;
+
+			if (diff < uint64_t(GLOBAL_GET("gui/timers/incremental_search_max_interval_msec")) * 2) {
+				for (int i = current + 1; i < items.size(); i++) {
+					if (CAN_SELECT(i) && items[i].text.begins_with(search_string)) {
+						set_current(i);
+						ensure_current_is_visible();
+						if (select_mode == SELECT_SINGLE) {
+							emit_signal(SNAME("item_selected"), current);
+						}
+						break;
+					}
+				}
+				accept_event();
+				return;
+			}
+		}
+
+		if (current < items.size() - current_columns) {
+			int next = current + current_columns;
+			while (next < items.size() && !CAN_SELECT(next)) {
+				next = next + current_columns;
+			}
+			if (next >= items.size()) {
+				accept_event();
+				return;
+			}
+			set_current(next);
+			ensure_current_is_visible();
+			if (select_mode == SELECT_SINGLE) {
+				emit_signal(SNAME("item_selected"), current);
+			}
+			accept_event();
+		}
+		return;
+	}
+
+	if (joypad_motion_echo_handled.left) {
+		search_string = ""; //any mousepress cancels
+
+		if (current % current_columns != 0) {
+			int current_row = current / current_columns;
+			int next = current - 1;
+			while (!CAN_SELECT(next)) {
+				next = next - 1;
+			}
+			if (next < 0 || !IS_SAME_ROW(next, current_row)) {
+				accept_event();
+				return;
+			}
+			set_current(next);
+			ensure_current_is_visible();
+			if (select_mode == SELECT_SINGLE) {
+				emit_signal(SNAME("item_selected"), current);
+			}
+			accept_event();
+		}
+		return;
+	}
+
+	if (joypad_motion_echo_handled.right) {
+		search_string = ""; //any mousepress cancels
+
+		if (current % current_columns != (current_columns - 1) && current + 1 < items.size()) {
+			int current_row = current / current_columns;
+			int next = current + 1;
+			while (!CAN_SELECT(next)) {
+				next = next + 1;
+			}
+			if (items.size() <= next || !IS_SAME_ROW(next, current_row)) {
+				accept_event();
+				return;
+			}
+			set_current(next);
+			ensure_current_is_visible();
+			if (select_mode == SELECT_SINGLE) {
+				emit_signal(SNAME("item_selected"), current);
+			}
+			accept_event();
+		}
+		return;
+	}
+
+#undef CAN_SELECT
+#undef IS_SAME_ROW
+}
+
 void ItemList::_shape(int p_idx) {
 	Item &item = items.write[p_idx];
 
@@ -721,7 +868,180 @@ void ItemList::gui_input(const Ref<InputEvent> &p_event) {
 		scroll_bar->set_value(scroll_bar->get_value() + scroll_bar->get_page() * mb->get_factor() / 8);
 	}
 
-	if (p_event->is_pressed() && items.size() > 0) {
+	Ref<InputEventJoypadMotion> joypadmotion_event = p_event;
+	Ref<InputEventJoypadButton> joypadbutton_event = p_event;
+
+	if ((joypadmotion_event.is_valid() || joypadbutton_event.is_valid()) && items.size() > 0) {
+		Input *input = Input::get_singleton();
+
+		if (p_event->is_action_pressed("ui_up")) {
+			if (joypad_motion_echo_handled.up) {
+				return;
+			}
+
+			delay_timer->start();
+			joypad_motion_echo_handled.up = true;
+
+			if (!search_string.is_empty()) {
+				uint64_t now = OS::get_singleton()->get_ticks_msec();
+				uint64_t diff = now - search_time_msec;
+
+				if (diff < uint64_t(GLOBAL_GET("gui/timers/incremental_search_max_interval_msec")) * 2) {
+					for (int i = current - 1; i >= 0; i--) {
+						if (CAN_SELECT(i) && items[i].text.begins_with(search_string)) {
+							set_current(i);
+							ensure_current_is_visible();
+							if (select_mode == SELECT_SINGLE) {
+								emit_signal(SNAME("item_selected"), current);
+							}
+
+							break;
+						}
+					}
+					accept_event();
+					return;
+				}
+			}
+
+			if (current >= current_columns) {
+				int next = current - current_columns;
+				while (next >= 0 && !CAN_SELECT(next)) {
+					next = next - current_columns;
+				}
+				if (next < 0) {
+					accept_event();
+					return;
+				}
+				set_current(next);
+				ensure_current_is_visible();
+				if (select_mode == SELECT_SINGLE) {
+					emit_signal(SNAME("item_selected"), current);
+				}
+				accept_event();
+			}
+		} else if (input->is_action_just_released("ui_up")) {
+			joypad_motion_echo_handled.up = false;
+			delay_timer->stop();
+			echo_timer->stop();
+		}
+
+		if (p_event->is_action_pressed("ui_down")) {
+			if (joypad_motion_echo_handled.down) {
+				return;
+			}
+
+			delay_timer->start();
+			joypad_motion_echo_handled.down = true;
+
+			if (!search_string.is_empty()) {
+				uint64_t now = OS::get_singleton()->get_ticks_msec();
+				uint64_t diff = now - search_time_msec;
+
+				if (diff < uint64_t(GLOBAL_GET("gui/timers/incremental_search_max_interval_msec")) * 2) {
+					for (int i = current + 1; i < items.size(); i++) {
+						if (CAN_SELECT(i) && items[i].text.begins_with(search_string)) {
+							set_current(i);
+							ensure_current_is_visible();
+							if (select_mode == SELECT_SINGLE) {
+								emit_signal(SNAME("item_selected"), current);
+							}
+							break;
+						}
+					}
+					accept_event();
+					return;
+				}
+			}
+
+			if (current < items.size() - current_columns) {
+				int next = current + current_columns;
+				while (next < items.size() && !CAN_SELECT(next)) {
+					next = next + current_columns;
+				}
+				if (next >= items.size()) {
+					accept_event();
+					return;
+				}
+				set_current(next);
+				ensure_current_is_visible();
+				if (select_mode == SELECT_SINGLE) {
+					emit_signal(SNAME("item_selected"), current);
+				}
+				accept_event();
+			}
+		} else if (input->is_action_just_released("ui_down")) {
+			joypad_motion_echo_handled.down = false;
+			delay_timer->stop();
+			echo_timer->stop();
+		}
+
+		if (p_event->is_action_pressed("ui_left")) {
+			if (joypad_motion_echo_handled.left) {
+				return;
+			}
+			delay_timer->start();
+			joypad_motion_echo_handled.left = true;
+
+			search_string = ""; //any mousepress cancels
+
+			if (current % current_columns != 0) {
+				int current_row = current / current_columns;
+				int next = current - 1;
+				while (!CAN_SELECT(next)) {
+					next = next - 1;
+				}
+				if (next < 0 || !IS_SAME_ROW(next, current_row)) {
+					accept_event();
+					return;
+				}
+				set_current(next);
+				ensure_current_is_visible();
+				if (select_mode == SELECT_SINGLE) {
+					emit_signal(SNAME("item_selected"), current);
+				}
+				accept_event();
+			}
+		} else if (input->is_action_just_released("ui_left")) {
+			joypad_motion_echo_handled.left = false;
+			delay_timer->stop();
+			echo_timer->stop();
+		}
+
+		if (p_event->is_action_pressed("ui_right")) {
+			if (joypad_motion_echo_handled.right) {
+				return;
+			}
+
+			delay_timer->start();
+			joypad_motion_echo_handled.right = true;
+
+			search_string = ""; //any mousepress cancels
+
+			if (current % current_columns != (current_columns - 1) && current + 1 < items.size()) {
+				int current_row = current / current_columns;
+				int next = current + 1;
+				while (!CAN_SELECT(next)) {
+					next = next + 1;
+				}
+				if (items.size() <= next || !IS_SAME_ROW(next, current_row)) {
+					accept_event();
+					return;
+				}
+				set_current(next);
+				ensure_current_is_visible();
+				if (select_mode == SELECT_SINGLE) {
+					emit_signal(SNAME("item_selected"), current);
+				}
+				accept_event();
+			}
+		} else if (input->is_action_just_released("ui_right")) {
+			joypad_motion_echo_handled.right = false;
+			delay_timer->stop();
+			echo_timer->stop();
+		}
+	}
+
+	if (p_event->is_pressed() && items.size() > 0 && !joypadmotion_event.is_valid() && !joypadbutton_event.is_valid()) {
 		if (p_event->is_action("ui_up", true)) {
 			if (!search_string.is_empty()) {
 				uint64_t now = OS::get_singleton()->get_ticks_msec();
@@ -1836,6 +2156,21 @@ ItemList::ItemList() {
 
 	set_focus_mode(FOCUS_ALL);
 	set_clip_contents(true);
+
+	delay_timer = memnew(Timer);
+	delay_timer->set_one_shot(true);
+	delay_timer->set_wait_time(GLOBAL_DEF_BASIC("gui/timers/default_joypad_motion_delay", .5));
+	ProjectSettings::get_singleton()->set_custom_property_info(PropertyInfo(Variant::FLOAT, "gui/timers/default_joypad_motion_delay", PROPERTY_HINT_RANGE, "0.01,1.0,0.01")); // No negative numbers
+	delay_timer->connect("timeout", callable_mp(this, &ItemList::_on_timeout_joypad_delay_timer));
+	add_child(delay_timer);
+
+	joypad_motion_echo_handled.repeat_rate = GLOBAL_DEF_BASIC("gui/common/default_joypad_motion_repeating_rate", 20);
+	ProjectSettings::get_singleton()->set_custom_property_info(PropertyInfo(Variant::INT, "gui/common/default_joypad_motion_repeating_rate", PROPERTY_HINT_RANGE, "1,100,1")); // No negative numbers
+
+	echo_timer = memnew(Timer);
+	echo_timer->set_wait_time((float)1 / (float)joypad_motion_echo_handled.repeat_rate);
+	echo_timer->connect("timeout", callable_mp(this, &ItemList::_on_timeout_joypad_echo_timer));
+	add_child(echo_timer);
 }
 
 ItemList::~ItemList() {

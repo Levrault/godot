@@ -568,6 +568,20 @@ private:
 		float base_scale = 1.0;
 	} theme_cache;
 
+	struct JoypadMotionEcho {
+		int repeat_rate = 20;
+		bool up = false;
+		bool down = false;
+		bool is_valid() {
+			return up || down;
+		};
+	} joypad_motion_echo_handled;
+
+	Timer *delay_timer = nullptr;
+	Timer *echo_timer = nullptr;
+	void _on_timeout_joypad_delay_timer();
+	void _on_timeout_joypad_echo_timer();
+
 public:
 	String get_parsed_text() const;
 	void add_text(const String &p_text);

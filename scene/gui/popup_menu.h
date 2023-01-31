@@ -85,6 +85,20 @@ class PopupMenu : public Popup {
 		}
 	};
 
+	struct JoypadMotionEcho {
+		int repeat_rate = 20;
+		bool up = false;
+		bool down = false;
+		bool is_valid() {
+			return up || down;
+		};
+	} joypad_motion_echo_handled;
+
+	Timer *delay_timer = nullptr;
+	Timer *echo_timer = nullptr;
+	void _on_timeout_joypad_delay_timer();
+	void _on_timeout_joypad_echo_timer();
+
 	bool close_allowed = false;
 	bool activated_by_keyboard = false;
 

@@ -487,6 +487,21 @@ private:
 
 	void propagate_set_columns(TreeItem *p_item);
 
+	struct JoypadMotionEcho {
+		int repeat_rate = 20;
+		bool up = false;
+		bool down = false;
+		bool left = false;
+		bool right = false;
+		bool is_valid() {
+			return up || down || left || right;
+		};
+	} joypad_motion_echo_handled;
+	Timer *delay_timer = nullptr;
+	Timer *echo_timer = nullptr;
+	void _on_timeout_joypad_delay_timer();
+	void _on_timeout_joypad_echo_timer();
+
 	struct ThemeCache {
 		Ref<StyleBox> panel_style;
 		Ref<StyleBox> focus_style;

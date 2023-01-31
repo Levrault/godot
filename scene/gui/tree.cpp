@@ -3193,7 +3193,97 @@ void Tree::gui_input(const Ref<InputEvent> &p_event) {
 	Ref<InputEventKey> k = p_event;
 
 	bool is_command = k.is_valid() && k->is_command_or_control_pressed();
-	if (p_event->is_action("ui_right", true) && p_event->is_pressed()) {
+
+	Ref<InputEventJoypadMotion> joypadmotion_event = p_event;
+	Ref<InputEventJoypadButton> joypadbutton_event = p_event;
+
+	if (joypadmotion_event.is_valid() || joypadbutton_event.is_valid()) {
+		Input *input = Input::get_singleton();
+
+		if (p_event->is_action_pressed("ui_left")) {
+			if (joypad_motion_echo_handled.left) {
+				return;
+			}
+			if (!cursor_can_exit_tree) {
+				accept_event();
+			}
+
+			if (!selected_item || select_mode == SELECT_ROW || selected_col < 0) {
+				return;
+			}
+
+			_go_left();
+			delay_timer->start();
+			joypad_motion_echo_handled.left = true;
+		} else if (input->is_action_just_released("ui_left")) {
+			joypad_motion_echo_handled.left = false;
+			delay_timer->stop();
+			echo_timer->stop();
+		}
+
+		if (p_event->is_action_pressed("ui_right")) {
+			if (joypad_motion_echo_handled.right) {
+				return;
+			}
+
+			if (!cursor_can_exit_tree) {
+				accept_event();
+			}
+
+			if (!selected_item || select_mode == SELECT_ROW || selected_col > (columns.size() - 1)) {
+				return;
+			}
+
+			_go_right();
+			delay_timer->stop();
+			delay_timer->start();
+			joypad_motion_echo_handled.right = true;
+		} else if (input->is_action_just_released("ui_right")) {
+			joypad_motion_echo_handled.right = false;
+			delay_timer->stop();
+			echo_timer->stop();
+		}
+
+		if (p_event->is_action_pressed("ui_up")) {
+
+			if (joypad_motion_echo_handled.up) {
+				return;
+			}
+			if (!cursor_can_exit_tree) {
+				accept_event();
+			}
+
+			_go_up();
+			delay_timer->stop();
+			delay_timer->start();
+			joypad_motion_echo_handled.up = true;
+		} else if (input->is_action_just_released("ui_up")) {
+			joypad_motion_echo_handled.up = false;
+			delay_timer->stop();
+			echo_timer->stop();
+		}
+
+		if (p_event->is_action_pressed("ui_down")) {
+			if (joypad_motion_echo_handled.down) {
+				return;
+			}
+
+			if (!cursor_can_exit_tree) {
+				accept_event();
+			}
+
+			_go_down();
+			delay_timer->stop();
+			delay_timer->start();
+			joypad_motion_echo_handled.down = true;
+		} else if (input->is_action_just_released("ui_down")) {
+			joypad_motion_echo_handled.down = false;
+			delay_timer->stop();
+			echo_timer->stop();
+		}
+	}
+
+	if (p_event->is_action("ui_right", true) && p_event->is_pressed() && !joypadmotion_event.is_valid() && !joypadbutton_event.is_valid()) {
 		if (!cursor_can_exit_tree) {
 			accept_event();
 		}
@@ -3211,7 +3301,7 @@ void Tree::gui_input(const Ref<InputEvent> &p_event) {
 		} else {
 			_go_right();
 		}
-	} else if (p_event->is_action("ui_left", true) && p_event->is_pressed()) {
+	} else if (p_event->is_action("ui_left", true) && p_event->is_pressed() && !joypadmotion_event.is_valid() && !joypadbutton_event.is_valid()) {
 		if (!cursor_can_exit_tree) {
 			accept_event();
 		}
@@ -3231,14 +3321,14 @@ void Tree::gui_input(const Ref<InputEvent> &p_event) {
 			_go_left();
 		}
 
-	} else if (p_event->is_action("ui_up", true) && p_event->is_pressed() && !is_command) {
+	} else if (p_event->is_action("ui_up", true) && p_event->is_pressed() && !is_command && !joypadmotion_event.is_valid() && !joypadbutton_event.is_valid()) {
 		if (!cursor_can_exit_tree) {
 			accept_event();
 		}
 
 		_go_up();
 
-	} else if (p_event->is_action("ui_down", true) && p_event->is_pressed() && !is_command) {
+	} else if (p_event->is_action("ui_down", true) && p_event->is_pressed() && !is_command && !joypadmotion_event.is_valid() && !joypadbutton_event.is_valid()) {
 		if (!cursor_can_exit_tree) {
 			accept_event();
 		}
@@ -4395,6 +4485,64 @@ TreeItem *Tree::get_next_selected(TreeItem *p_item) {
 	return nullptr;
 }
 
+void Tree::_on_timeout_joypad_delay_timer() {
+	if (!joypad_motion_echo_handled.is_valid() || !has_focus()) {
+		return;
+	}
+	echo_timer->start();
+}
+
+void Tree::_on_timeout_joypad_echo_timer() {
+	if (!joypad_motion_echo_handled.is_valid() || !has_focus()) {
+		echo_timer->stop();
+		return;
+	}
+
+	if (joypad_motion_echo_handled.left) {
+		if (!cursor_can_exit_tree) {
+			accept_event();
+		}
+
+		if (!selected_item || select_mode == SELECT_ROW || selected_col < 0) {
+			return;
+		}
+
+		_go_left();
+		return;
+	}
+
+	if (joypad_motion_echo_handled.right) {
+		if (!cursor_can_exit_tree) {
+			accept_event();
+		}
+
+		if (!selected_item || select_mode == SELECT_ROW || selected_col > (columns.size() - 1)) {
+			return;
+		}
+		_go_right();
+		return;
+	}
+
+
+	if (joypad_motion_echo_handled.down) {
+		if (!cursor_can_exit_tree) {
+			accept_event();
+		}
+
+		_go_down();
+		return;
+	}
+
+ 	if (joypad_motion_echo_handled.up) {
+		if (!cursor_can_exit_tree) {
+			accept_event();
+		}
+
+		_go_up();
+		return;
+	}
+}
+
 int Tree::get_column_minimum_width(int p_column) const {
 	ERR_FAIL_INDEX_V(p_column, columns.size(), -1);
 
@@ -5320,6 +5468,21 @@ Tree::Tree() {
 	set_mouse_filter(MOUSE_FILTER_STOP);
 
 	set_clip_contents(true);
+
+	delay_timer = memnew(Timer);
+	delay_timer->set_one_shot(true);
+	delay_timer->set_wait_time(GLOBAL_DEF_BASIC("gui/timers/default_joypad_motion_delay", .5));
+	ProjectSettings::get_singleton()->set_custom_property_info(PropertyInfo(Variant::FLOAT, "gui/timers/default_joypad_motion_delay", PROPERTY_HINT_RANGE, "0.01,1.0,0.01")); // No negative numbers
+	delay_timer->connect("timeout", callable_mp(this, &Tree::_on_timeout_joypad_delay_timer));
+	add_child(delay_timer);
+
+	joypad_motion_echo_handled.repeat_rate = GLOBAL_DEF_BASIC("gui/common/default_joypad_motion_repeating_rate", 20);
+	ProjectSettings::get_singleton()->set_custom_property_info(PropertyInfo(Variant::INT, "gui/common/default_joypad_motion_repeating_rate", PROPERTY_HINT_RANGE, "1,100,1")); // No negative numbers
+
+	echo_timer = memnew(Timer);
+	echo_timer->set_wait_time((float)1 / (float)joypad_motion_echo_handled.repeat_rate);
+	echo_timer->connect("timeout", callable_mp(this, &Tree::_on_timeout_joypad_echo_timer));
+	add_child(echo_timer);
 }
 
 Tree::~Tree() {

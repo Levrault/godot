@@ -38,6 +38,90 @@
 #include "core/string/translation.h"
 #include "scene/gui/menu_bar.h"
 
+void PopupMenu::_on_timeout_joypad_delay_timer() {
+	if (!joypad_motion_echo_handled.is_valid() || !has_focus()) {
+		return;
+	}
+	echo_timer->start();
+}
+
+void PopupMenu::_on_timeout_joypad_echo_timer() {
+	if (!joypad_motion_echo_handled.is_valid() || !has_focus()) {
+		echo_timer->stop();
+		return;
+	}
+
+	if (joypad_motion_echo_handled.down) {
+		int search_from = mouse_over + 1;
+		if (search_from >= items.size()) {
+			search_from = 0;
+		}
+
+		bool match_found = false;
+		for (int i = search_from; i < items.size(); i++) {
+			if (!items[i].separator && !items[i].disabled) {
+				mouse_over = i;
+				emit_signal(SNAME("id_focused"), i);
+				scroll_to_item(i);
+				control->queue_redraw();
+				set_input_as_handled();
+				match_found = true;
+				break;
+			}
+		}
+
+		if (!match_found) {
+			// If the last item is not selectable, try re-searching from the start.
+			for (int i = 0; i < search_from; i++) {
+				if (!items[i].separator && !items[i].disabled) {
+					mouse_over = i;
+					emit_signal(SNAME("id_focused"), i);
+					scroll_to_item(i);
+					control->queue_redraw();
+					set_input_as_handled();
+					break;
+				}
+			}
+		}
+		return;
+	}
+
+	if (joypad_motion_echo_handled.up) {
+		int search_from = mouse_over - 1;
+		if (search_from < 0) {
+			search_from = items.size() - 1;
+		}
+
+		bool match_found = false;
+		for (int i = search_from; i >= 0; i--) {
+			if (!items[i].separator && !items[i].disabled) {
+				mouse_over = i;
+				emit_signal(SNAME("id_focused"), i);
+				scroll_to_item(i);
+				control->queue_redraw();
+				set_input_as_handled();
+				match_found = true;
+				break;
+			}
+		}
+
+		if (!match_found) {
+			// If the first item is not selectable, try re-searching from the end.
+			for (int i = items.size() - 1; i >= search_from; i--) {
+				if (!items[i].separator && !items[i].disabled) {
+					mouse_over = i;
+					emit_signal(SNAME("id_focused"), i);
+					scroll_to_item(i);
+					control->queue_redraw();
+					set_input_as_handled();
+					break;
+				}
+			}
+		}
+		return;
+	}
+}
+
 String PopupMenu::_get_accel_text(const Item &p_item) const {
 	if (p_item.shortcut.is_valid()) {
 		return p_item.shortcut->get_as_text();
@@ -272,8 +356,109 @@ void PopupMenu::_submenu_timeout() {
 void PopupMenu::gui_input(const Ref<InputEvent> &p_event) {
 	ERR_FAIL_COND(p_event.is_null());
 
+	Ref<InputEventJoypadMotion> joypadmotion_event = p_event;
+	Ref<InputEventJoypadButton> joypadbutton_event = p_event;
+
 	if (!items.is_empty()) {
-		if (p_event->is_action("ui_down", true) && p_event->is_pressed()) {
+
+		// joypad motion
+		if (joypadmotion_event.is_valid() || joypadbutton_event.is_valid()) {
+
+			Input *input = Input::get_singleton();
+
+			if (p_event->is_action_pressed("ui_down")) {
+				if (joypad_motion_echo_handled.down) {
+					return;
+				}
+				delay_timer->start();
+				joypad_motion_echo_handled.down = true;
+
+				int search_from = mouse_over + 1;
+				if (search_from >= items.size()) {
+					search_from = 0;
+				}
+
+				bool match_found = false;
+				for (int i = search_from; i < items.size(); i++) {
+					if (!items[i].separator && !items[i].disabled) {
+						mouse_over = i;
+						emit_signal(SNAME("id_focused"), i);
+						scroll_to_item(i);
+						control->queue_redraw();
+						set_input_as_handled();
+						match_found = true;
+						break;
+					}
+				}
+
+				if (!match_found) {
+					// If the last item is not selectable, try re-searching from the start.
+					for (int i = 0; i < search_from; i++) {
+						if (!items[i].separator && !items[i].disabled) {
+							mouse_over = i;
+							emit_signal(SNAME("id_focused"), i);
+							scroll_to_item(i);
+							control->queue_redraw();
+							set_input_as_handled();
+							break;
+						}
+					}
+				}
+
+			} else if (input->is_action_just_released("ui_down")) {
+				joypad_motion_echo_handled.down = false;
+				delay_timer->stop();
+				echo_timer->stop();
+			}
+
+			if (p_event->is_action_pressed("ui_up")) {
+				if (joypad_motion_echo_handled.up) {
+					return;
+				}
+				delay_timer->start();
+				joypad_motion_echo_handled.up = true;
+
+				int search_from = mouse_over - 1;
+				if (search_from < 0) {
+					search_from = items.size() - 1;
+				}
+
+				bool match_found = false;
+				for (int i = search_from; i >= 0; i--) {
+					if (!items[i].separator && !items[i].disabled) {
+						mouse_over = i;
+						emit_signal(SNAME("id_focused"), i);
+						scroll_to_item(i);
+						control->queue_redraw();
+						set_input_as_handled();
+						match_found = true;
+						break;
+					}
+				}
+
+				if (!match_found) {
+					// If the first item is not selectable, try re-searching from the end.
+					for (int i = items.size() - 1; i >= search_from; i--) {
+						if (!items[i].separator && !items[i].disabled) {
+							mouse_over = i;
+							emit_signal(SNAME("id_focused"), i);
+							scroll_to_item(i);
+							control->queue_redraw();
+							set_input_as_handled();
+							break;
+						}
+					}
+				}
+
+			} else if (input->is_action_just_released("ui_up")) {
+				joypad_motion_echo_handled.up = false;
+				delay_timer->stop();
+				echo_timer->stop();
+			}
+		}
+
+
+		if (p_event->is_action("ui_down", true) && p_event->is_pressed() && !joypadmotion_event.is_valid() && !joypadbutton_event.is_valid()) {
 			int search_from = mouse_over + 1;
 			if (search_from >= items.size()) {
 				search_from = 0;
@@ -305,7 +490,7 @@ void PopupMenu::gui_input(const Ref<InputEvent> &p_event) {
 					}
 				}
 			}
-		} else if (p_event->is_action("ui_up", true) && p_event->is_pressed()) {
+		} else if (p_event->is_action("ui_up", true) && p_event->is_pressed() && !joypadmotion_event.is_valid() && !joypadbutton_event.is_valid()) {
 			int search_from = mouse_over - 1;
 			if (search_from < 0) {
 				search_from = items.size() - 1;
@@ -2137,6 +2322,21 @@ PopupMenu::PopupMenu() {
 	minimum_lifetime_timer->set_one_shot(true);
 	minimum_lifetime_timer->connect("timeout", callable_mp(this, &PopupMenu::_minimum_lifetime_timeout));
 	add_child(minimum_lifetime_timer, false, INTERNAL_MODE_FRONT);
+
+	delay_timer = memnew(Timer);
+	delay_timer->set_one_shot(true);
+	delay_timer->set_wait_time(GLOBAL_DEF_BASIC("gui/timers/default_joypad_motion_delay", .5));
+	ProjectSettings::get_singleton()->set_custom_property_info(PropertyInfo(Variant::FLOAT, "gui/timers/default_joypad_motion_delay", PROPERTY_HINT_RANGE, "0.01,1.0,0.01")); // No negative numbers
+	delay_timer->connect("timeout", callable_mp(this, &PopupMenu::_on_timeout_joypad_delay_timer));
+	add_child(delay_timer);
+
+	joypad_motion_echo_handled.repeat_rate = GLOBAL_DEF_BASIC("gui/common/default_joypad_motion_repeating_rate", 20);
+	ProjectSettings::get_singleton()->set_custom_property_info(PropertyInfo(Variant::INT, "gui/common/default_joypad_motion_repeating_rate", PROPERTY_HINT_RANGE, "1,100,1")); // No negative numbers
+
+	echo_timer = memnew(Timer);
+	echo_timer->set_wait_time((float)1 / (float)joypad_motion_echo_handled.repeat_rate);
+	echo_timer->connect("timeout", callable_mp(this, &PopupMenu::_on_timeout_joypad_echo_timer));
+	add_child(echo_timer);
 }
 
 PopupMenu::~PopupMenu() {
